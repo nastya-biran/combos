@@ -1,6 +1,6 @@
 BIN_FILES  = boinc_simulator create_platform create_deployment
 
-INSTALL_PATH = $(HOME)/simgrid
+INSTALL_PATH = /opt/simgrid
 
 CC = gcc
 
