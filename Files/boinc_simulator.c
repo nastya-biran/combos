@@ -38,14 +38,14 @@ XBT_LOG_NEW_DEFAULT_CATEGORY(boinc_simulator, "Messages specific for this boinc 
 
 #define MAX_SHORT_TERM_DEBT 86400
 #define MAX_TIMEOUT_SERVER 86400*365 	// One year without client activity, only to finish simulation for a while
-#define MAX_SIMULATED_TIME 24		// Simulation time in hours
+#define MAX_SIMULATED_TIME 100		// Simulation time in hours
 #define WORK_FETCH_PERIOD 60		// Work fetch period
 #define KB 1024				// 1 KB in bytes
 #define PRECISION 0.00001		// Accuracy (used in client_work_fetch())
 #define CREDITS_CPU_S 0.002315 		// Credits per second (1 GFLOP machine)
 #define NUMBER_PROJECTS 1		// Number of projects
 #define NUMBER_SCHEDULING_SERVERS 1	// Number of scheduling servers
-#define NUMBER_DATA_SERVERS 1		// Number of data servers per project
+#define NUMBER_DATA_SERVERS 2		// Number of data servers per project
 #define NUMBER_CLIENT_GROUPS 1		// Number of groups
 #define REQUEST_SIZE 10*KB		// Request size
 #define REPLY_SIZE 10*KB		// Reply size 
@@ -286,6 +286,12 @@ struct project_database{
 	int64_t nworkunits;		// Number of workunits created
 	int64_t nvalid_workunits;	// Number of workunits validated
 	int64_t nerror_workunits;	// Number of erroneous workunits
+	double *valid_workunits_timestamps;
+	int64_t valid_workunits_size;
+
+	/* Clients statistics*/
+
+	int32_t *clients_availability;
 
 	/* Work generator */
 
@@ -647,7 +653,13 @@ int print_results(){
 		printf("  Workunits error: \t\t%'" PRId64 " (%0.1f%%)\n", database->nerror_workunits, (double)database->nerror_workunits/database->nworkunits*100);	
 		printf("  Throughput: \t\t\t%'0.1f mens/s\n", (double)database->nmessages_received/max);
 		printf("  Credit granted: \t\t%'" PRId64 " credits\n", (long int)database->total_credit);
-		printf("  FLOPS average: \t\t%'" PRId64 " GFLOPS\n\n", (int64_t)((double)database->nvalid_results*(double)database->job_duration/max/1000000000.0));		
+		printf("  FLOPS average: \t\t%'" PRId64 " GFLOPS\n\n", (int64_t)((double)database->nvalid_results*(double)database->job_duration/max/1000000000.0));	
+		FILE *task_dynamic_file = fopen("../exp/task_dynamic", "w+");
+		for(j=0; j<database->valid_workunits_size; j++) fprintf(task_dynamic_file, "%0.1f\n", database->valid_workunits_timestamps[j]);	
+		fclose(task_dynamic_file);
+		FILE *clients_dynamic_file = fopen("../exp/clients_dynamic", "w+");
+		for(j=0; j<max; j++) fprintf(clients_dynamic_file, "%d\n", database->clients_availability[j]);	
+		fclose(clients_dynamic_file);
 	}
 
 	return 0;
@@ -703,9 +715,12 @@ int init_database(int argc, char *argv[])
 	database->nvalid_workunits = 0;					// Number of valid workunits
 	database->nerror_workunits = 0;					// Number of erroneous workunits
 	database->nfinished_scheduling_servers = 0;			// Number of finished scheduling servers
+	database->valid_workunits_size = 0;
 	
 	// Fill with data server names
 	database->data_servers = xbt_new0(char*, (int) database->ndata_servers);
+	database->valid_workunits_timestamps = xbt_new0(double, 100000);
+	database->clients_availability = xbt_new0(int32_t, 10000000);
 	for(i=0; i<database->ndata_servers; i++)
 		database->data_servers[i] = bprintf("d%" PRId32 "%" PRId32, project_number+1, i);
 
@@ -903,6 +918,7 @@ int validator(int argc, char *argv[])
 				workunit->status = VALID;
 				database->nvalid_results += (int64_t)(workunit->nvalid_results);
 				database->total_credit += (int64_t)(workunit->credits*workunit->nvalid_results);	
+				database->valid_workunits_timestamps[database->valid_workunits_size++] = MSG_get_clock();
 			}
 			else if(workunit->ntotal_results 		>=	database->max_total_results		||
 				workunit->nerror_results 		>= 	database->max_error_results 		||
@@ -996,11 +1012,13 @@ int assimilator(int argc, char *argv[])
 		workunit = xbt_dict_get(database->current_workunits, workunit_number);
 
 		// Update workunit stats
-		if(workunit->status == VALID)
+		if(workunit->status == VALID){
 			database->nvalid_workunits++;
+		}
 		else
+		{
 			database->nerror_workunits++;	
-			
+		}
 		// Delete completed workunit from database
 		file_deleter(database, workunit->number);	
 	}
@@ -1127,7 +1145,7 @@ int scheduling_server_requests(int argc, char *argv[])
 			xbt_cond_signal(sserver_info->cond);
   	  	xbt_mutex_release(sserver_info->mutex);
 
-		// Free
+		// Freeprintf("%0.1f", random);
 		MSG_task_destroy(task);
 		task = NULL;			
 		msg = NULL;
@@ -1271,6 +1289,8 @@ int scheduling_server_dispatcher(int argc, char *argv[])
 		}
 		// Free
 		xbt_free(database->data_servers);
+		xbt_free(database->valid_workunits_timestamps);
+		xbt_free(database->clients_availability);
 	
 		// Finish project back-end	
 		database->wg_end = 1;	
@@ -2308,6 +2328,10 @@ static client_t client_new(int argc, char *argv[])
 		else if(aux < _group_info[group_number].min_speed)
 			aux = _group_info[group_number].min_speed;
 	}
+	printf("max speed %0.1f", _group_info[group_number].max_speed);
+	FILE* speed_statistics_file = fopen("../exp/speed_statistics", "a+");
+	fprintf(speed_statistics_file, "%0.1f\n", aux);
+	fclose(speed_statistics_file);
 
 	client->speed = (int64_t)(aux*1000000000.0);
 
@@ -2390,6 +2414,7 @@ int client(int argc, char *argv[])
 	client = client_new(argc, argv);
 	speed = client->speed;
 	
+	
 	//printf("Starting client %s\n", client->name);
 
 	while (ceil(MSG_get_clock()) < max) {
@@ -2397,14 +2422,18 @@ int client(int argc, char *argv[])
 #if 1
 		if(!working){
 			working = 1;
+			pdatabase_t database = &_pdatabase[0];
+			database->clients_availability[(int32_t)MSG_get_clock()] += 1;
 			random = (ran_distri(_group_info[client->group_number].av_distri, _group_info[client->group_number].aa_param, _group_info[client->group_number].ab_param)*3600.0);
 			if(ceil(random + MSG_get_clock()) >= max){
 				//printf("%f\n", random);
 				random = (double)max(max - MSG_get_clock(), 0);
 			}
+			//printf("%0.1f\n", random);
 			available+=random;
 			//printf("Weibull: %f\n", random);
 			time = MSG_get_clock() + random;
+			database->clients_availability[(int32_t)time] -= 1;
 		}
 #endif	
 
@@ -2431,7 +2460,6 @@ int client(int argc, char *argv[])
 		if(working && ceil(MSG_get_clock()) >= time){
 			working = 0;
 			random = (ran_distri(_group_info[client->group_number].nv_distri, _group_info[client->group_number].na_param, _group_info[client->group_number].nb_param)*3600.0);
-
 			if(ceil(random+MSG_get_clock()) > max){
 				//printf("%f\n", random);
 				random = max(max-MSG_get_clock(), 0);
@@ -2440,9 +2468,10 @@ int client(int argc, char *argv[])
 			
 			notavailable += random;
 			//printf("Lognormal: %f\n", random);
-		
-			if(client->running_project)
-				MSG_process_suspend(client->running_project->thread);
+
+			if(client->running_project) {
+-                MSG_process_suspend(client->running_project->thread);
+			}
 	
 			xbt_mutex_acquire(client->ask_for_work_mutex);
 			client->suspended = random;
@@ -2589,6 +2618,8 @@ int main(int argc, char *argv[])
 	}
 
 	seed(clock());
+
+	remove("../exp/speed_statistics");
 
 	_total_speed = 0;
 	_total_available = 0;
