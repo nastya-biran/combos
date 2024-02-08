@@ -31,12 +31,12 @@
 <client_side>
 	<n_groups>1</n_groups>					<!-- Number of groups -->
 	<group>
-		<n_clients>9000</n_clients>			 <!-- Number of clients of the cluster -->
+		<n_clients>15000</n_clients>			 <!-- Number of clients of the cluster -->
 		<connection_interval>1</connection_interval>	<!-- Connection interval -->
 		<scheduling_interval>3600</connection_interval>	<!-- Scheduling interval -->
 		<gbw>1Gbps</gbw>				<!-- Cluster link bandwidth in bps -->
 		<glatency>10ms</glatency>			<!-- Cluster link latency -->
-		<traces_file>NULL</traces_file>			<!-- Host power traces file -->
+		<traces_file>/Traces/asteroids/unsorted</traces_file>			<!-- Host power traces file -->
 		<max_speed>337</max_speed>			<!-- Maximum host speed in GFlops -->
 		<min_speed>3</min_speed>			<!-- Minumum host speed in GFlops -->
 		<pv_distri>5</pv_distri>			<!-- Speed fit distribution [ran_weibull, ran_gamma, ran_lognormal, normal, hyperx, exponential] -->
@@ -46,8 +46,8 @@
 		<aa_param>0.393</aa_param>			<!-- A -->
 		<ab_param>2.964</ab_param>			<!-- B -->
 		<nv_distri>2</nv_distri>			<!-- Non-availability fit distribution [ran_weibull, ran_gamma, ran_lognormal, normal, hyperx, exponential] -->
-		<na_param>2.844</na_param>			<!-- A -->
-		<nb_param>-0.586</nb_param>			<!-- B -->
+		<na_param>-0.586</na_param>			<!-- A -->
+		<nb_param>2.844</nb_param>			<!-- B -->
 		<att_projs>1</att_projs>			<!-- Number of projects attached -->
 		<gproject>
 			<pnumber>0</pnumber>			<!-- Project number -->
