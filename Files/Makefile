@@ -1,4 +1,4 @@
-BIN_FILES  = boinc_simulator create_platform create_deployment
+BIN_FILES  = boinc_simulator create_platform create_deployment random
 
 INSTALL_PATH = /opt/simgrid
 
@@ -25,6 +25,9 @@ create_platform: create_platform.o
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 create_deployment: create_deployment.o rand.o
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+random: rand.o rand_and_print.o
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 %.o: %.c

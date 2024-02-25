@@ -173,68 +173,96 @@ int main(int argc, char *argv[]){
 		free(traces_file);
 
 		// READ LINE
-		for(j=0; j<n_clients; j++){
-			if(j==0){
-				fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, j);
-				fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%d\"/>  ", i); 		// <!-- Cluster number-->
-				fprintf(fd, "\n");
-	 			fprintf(fd, "        <argument value=\"%d\"/>  ", n_clients); 	// <!-- Number of clients -->
-				fprintf(fd, "\n");
-        		        fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- ConnectionInterval -->
-				fprintf(fd, "\n");
-        	  	      	fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- SchedulingInterval -->
-				fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Max speed -->
-				fprintf(fd, "\n");
- 				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Min speed -->
-				fprintf(fd, "\n");               
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Sp. random distribution -->
-				fprintf(fd, "\n");
-        	        	fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
-				fprintf(fd, "\n");
-        	        	fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
-				fprintf(fd, "\n");
-        	        	fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Av. random distribution -->
-				fprintf(fd, "\n");
-        	       		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
-				fprintf(fd, "\n");
-        	 	       	fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
-				fprintf(fd, "\n");
-        	     		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Nav. random distribution -->
-				fprintf(fd, "\n");
-        	        	fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
-				fprintf(fd, "\n");
-        	        	fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
-				fprintf(fd, "\n");
-        	        	if(fd_traces != NULL){
-					fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
-					fprintf(fd, "\n");
-				}	
-				fprintf(fd, "        <argument value=\"%d\"/>", att_projs);	// <!-- Number of projects attached -->
-				fprintf(fd, "\n");
-				for(k=0; k<att_projs; k++){
-        		        	fprintf(fd, "        <argument value=\"Project%d\"/>", atoi(argv[index])+1);	// <!-- Project name ->	
-					fprintf(fd, "\n");
-					fprintf(fd, "        <argument value=\"%s\"/>", argv[index++]);		// <!-- Project number -->
-					fprintf(fd, "\n");
-        		       		fprintf(fd, "        <argument value=\"%s\"/>", argv[index++]);		// <!-- Project priority -->
-					fprintf(fd, "\n");
-				}
-			}else{
-				fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, j);
+		fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, 0);
+		fprintf(fd, "\n");
+		fprintf(fd, "        <argument value=\"%d\"/>  ", i); 		// <!-- Cluster number-->
+		fprintf(fd, "\n");
+		fprintf(fd, "        <argument value=\"%d\"/>  ", n_clients); 	// <!-- Number of clients -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- ConnectionInterval -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- SchedulingInterval -->
+		fprintf(fd, "\n");
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Max speed -->
+		fprintf(fd, "\n");
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Min speed -->
+		fprintf(fd, "\n");               
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Sp. random distribution -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Av. random distribution -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Nav. random distribution -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
+		fprintf(fd, "\n");
+				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
+		fprintf(fd, "\n");
+				if(fd_traces != NULL){
+			fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
+			fprintf(fd, "\n");
+		}	
+		fprintf(fd, "        <argument value=\"%d\"/>", att_projs);	// <!-- Number of projects attached -->
+		fprintf(fd, "\n");
+		for(k=0; k<att_projs; k++){
+					fprintf(fd, "        <argument value=\"Project%d\"/>", atoi(argv[index])+1);	// <!-- Project name ->	
+			fprintf(fd, "\n");
+			fprintf(fd, "        <argument value=\"%s\"/>", argv[index++]);		// <!-- Project number -->
+			fprintf(fd, "\n");
+					fprintf(fd, "        <argument value=\"%s\"/>", argv[index++]);		// <!-- Project priority -->
+			fprintf(fd, "\n");
+		}
+		fprintf(fd, "   </process> ");
+		fprintf(fd, "\n");
+
+		//Process new clients
+		char* new_hosts_array = argv[index++];
+		char* delim = ";";
+		int new_hosts_num = 1;
+		char *ptr = strtok(new_hosts_array, delim);
+		int cur_day = 1;
+		while(ptr != NULL)
+		{
+			int new_hosts_this_day = max(atoi(ptr), 0);
+			for (size_t k = 0; k < new_hosts_this_day; k++) {
+				fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, new_hosts_num);
 				fprintf(fd, "\n");
 				fprintf(fd, "        <argument value=\"%d\"/>  ", i); 				// <!-- Cluster number-->		
-				fprintf(fd, "\n"); 			
+				fprintf(fd, "\n"); 		
+				fprintf(fd, "        <argument value=\"%d\"/>  ", cur_day); 				// <!-- Day when the host should join-->		
+				fprintf(fd, "\n"); 	
 				if(fd_traces != NULL){
 					fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
 					fprintf(fd, "\n");
 				}	
+				fprintf(fd, "   </process> ");
+				fprintf(fd, "\n");
+				new_hosts_num++;
 			}
-			
+			cur_day++;
+			ptr = strtok(NULL, delim);
+		}
+		// Process initial clients
+		for(j=1; j<n_clients - new_hosts_num + 1; j++){
+			fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, j + new_hosts_num);
+			fprintf(fd, "\n");
+			fprintf(fd, "        <argument value=\"%d\"/>  ", i); 				// <!-- Cluster number-->		
+			fprintf(fd, "\n"); 		
+			fprintf(fd, "        <argument value=\"%d\"/>  ", 0); 				// <!-- Day when the host should join-->		
+			fprintf(fd, "\n"); 	
+			if(fd_traces != NULL){
+				fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
+				fprintf(fd, "\n");
+			}	
 			fprintf(fd, "   </process> ");
 			fprintf(fd, "\n");
-
 		}
 		if(fd_traces !=  NULL) fclose(fd_traces);	
 	}

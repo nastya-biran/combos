@@ -1,4 +1,4 @@
-<simulation_time>100</simulation_time>			 	<!-- Simulation time in hours -->
+<simulation_time>100</simulation_time>			 <!-- Simulation time in hours -->
 
 <!-- Server side -->
 <server_side>
@@ -21,8 +21,8 @@
 		<max_total_results>20</max_total_results>	<!-- Max number of total results -->
 		<max_success_results>20</max_success_results>	<!-- Max number of success results -->
 		<delay_bound>1000000</delay_bound>		<!-- Task deadline -->	
-		<success_percentage>90</success_percentage>	<!-- Percentage of success results -->
-		<canonical_percentage>90</canonical_percentage> <!-- Percentage of success results that make up a consensus -->
+		<success_percentage>80</success_percentage>	<!-- Percentage of success results -->
+		<canonical_percentage>80</canonical_percentage> <!-- Percentage of success results that make up a consensus -->
 		<replication>2</replication>			<!-- Input files replication -->
 	<sproject/>
 </server_side>
@@ -48,6 +48,9 @@
 		<nv_distri>2</nv_distri>			<!-- Non-availability fit distribution [ran_weibull, ran_gamma, ran_lognormal, normal, hyperx, exponential] -->
 		<na_param>-0.586</na_param>			<!-- A -->
 		<nb_param>2.844</nb_param>			<!-- B -->
+		<nh_distri>3</nh_distri>			<!-- New hosts per day fit distribution [ran_weibull, ran_gamma, ran_lognormal, normal, hyperx, exponential] -->
+		<ha_param>80</ha_param>				<!-- A -->
+		<hb_param>10</hb_param>				<!-- B -->
 		<att_projs>1</att_projs>			<!-- Number of projects attached -->
 		<gproject>
 			<pnumber>0</pnumber>			<!-- Project number -->

@@ -207,6 +207,7 @@ struct task {
 /* Client */
 struct client {
 	const char *name;
+	int join_day;
 	xbt_dict_t projects;		// all projects of client
 	xbt_heap_t deadline_missed;
 	project_t running_project; 
@@ -654,7 +655,7 @@ int print_results(){
 		printf("  Credit granted: \t\t%'" PRId64 " credits\n", (long int)database->total_credit);
 		printf("  FLOPS average: \t\t%'" PRId64 " GFLOPS\n\n", (int64_t)((double)database->nvalid_results*(double)database->job_duration/sim_duration/1000000000.0));	
 		FILE *task_dynamic_file = fopen("../exp/task_dynamic", "w+");
-		for(j=0; j<sim_duration; j++) fprintf(task_dynamic_file, "%0.1f\n", database->valid_workunits_timestamps[j]);	
+		for(j=0; j<sim_duration; j++) fprintf(task_dynamic_file, "%d\n", database->valid_workunits_timestamps[j]);	
 		fclose(task_dynamic_file);
 		FILE *clients_dynamic_file = fopen("../exp/clients_dynamic", "w+");
 		for(j=0; j<sim_duration; j++) fprintf(clients_dynamic_file, "%d\n", database->clients_availability[j]);	
@@ -2287,7 +2288,7 @@ static client_t client_new(int argc, char *argv[])
 	client->group_number = group_number = (int32_t)atoi(argv[index++]);
 
 	// Initialize values
-	if(argc > 3)
+	if(argc > 4)
 	{
 		_group_info[group_number].group_speed = (int32_t) MSG_get_host_speed(MSG_host_self()); 
 		_group_info[group_number].n_clients = (int32_t)atoi(argv[index++]);		
@@ -2316,7 +2317,8 @@ static client_t client_new(int argc, char *argv[])
 		while(_group_info[group_number].on == 0)
 			xbt_cond_wait(_group_info[group_number].cond, _group_info[group_number].mutex);
 		xbt_mutex_release(_group_info[group_number].mutex);
-		if(argc == 3) aux = atof(argv[index]);
+		client->join_day = atoi(argv[index++]);
+		if(argc == 4) aux = atof(argv[index]);
 	}
 
 	if(aux == -1){
@@ -2363,6 +2365,10 @@ static client_t client_new(int argc, char *argv[])
 	client->initialized = 0;
 	client->n_projects = 0;
 
+	if (client->join_day != 0) {
+		double join_time = client->join_day * 24 + uniform_ab(0, min(24, (sim_duration - MSG_get_clock()) / 3600.0));
+		MSG_process_sleep(join_time * 3600);
+	}
 	work_string = bprintf("work_fetch:%s\n", client->name);
 	client->work_fetch_thread = MSG_process_create(work_string, client_work_fetch, client, MSG_host_self());
 	xbt_free(work_string);
@@ -2427,9 +2433,9 @@ int client(int argc, char *argv[])
 				//printf("%f\n", random);
 				random = (double)max(sim_duration - MSG_get_clock(), 0);
 			}
-			FILE* availability = fopen("../exp/availability", "a+");
-			fprintf(availability, "%0.1f\n", random / 3600);
-			fclose(availability);
+			//FILE* availability = fopen("../exp/availability", "a+");
+			//fprintf(availability, "%0.1f\n", random / 3600);
+			//fclose(availability);
 			//printf("%0.1f\n", random);
 			available+=random;
 			//printf("Weibull: %f\n", random);
@@ -2468,9 +2474,9 @@ int client(int argc, char *argv[])
 				random = max(sim_duration-MSG_get_clock(), 0);
 				working = 1;
 			}
-			FILE* unavailability = fopen("../exp/unavailability", "a+");
-			fprintf(unavailability, "%0.1f\n", random / 3600);
-			fclose(unavailability);
+			//FILE* unavailability = fopen("../exp/unavailability", "a+");
+			//fprintf(unavailability, "%0.1f\n", random / 3600);
+			//fclose(unavailability);
 			
 			notavailable += random;
 			//printf("Lognormal: %f\n", random);
@@ -2598,6 +2604,9 @@ msg_error_t test_all(const char *platform_file, const char *application_file)
 	printf( "\n Clients. Average speed: %f GFLOPS. Available: %0.1f%% Not available %0.1f%%\n\n", (double)_total_speed/_num_clients_t/1000000000.0, _total_available*100.0/(_total_available+_total_notavailable), (_total_notavailable)*100.0/(_total_available+_total_notavailable));
 	
 	t = (double)time(NULL) - t;	// Program time
+	FILE* duration = fopen("../exp/duration", "a+");
+	fprintf(duration, "%d %d %0.1f\n", _num_clients_t, MAX_SIMULATED_TIME, t);
+	fclose(duration);
 	days = (int)(t / (24*3600));	// Calculate days
 	t -= (days*24*3600);
 	hours = (int)(t/3600);		// Calculate hours
