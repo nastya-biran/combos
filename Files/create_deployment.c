@@ -26,6 +26,22 @@ double getrow(FILE *fd){
 	return result;
 }
 
+int generate_type(double* percentages, int* stats) {
+	double rand = uniform_ab(0, 100);
+	double sum = 0;
+	for (int i = 0; i < 4; i++) {
+		sum += percentages[i];
+		if (rand < sum) {
+			stats[i]++;
+			return i;
+		}
+	}
+	stats[4]++;
+	return -1;
+}
+
+
+
 int main(int argc, char *argv[]){
 	
 	int i, j, k, l = 0;
@@ -171,6 +187,10 @@ int main(int argc, char *argv[]){
 		char* traces_file = bprintf("../%s", argv[index++]);
 		FILE *fd_traces = fopen(traces_file, "r");
 		free(traces_file);
+		double percantage_by_type[4];
+		for (int j = 0; j< 4; j++) {
+			percantage_by_type[j] = atof(argv[index++]);
+		}
 
 		// READ LINE
 		fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, 0);
@@ -228,6 +248,7 @@ int main(int argc, char *argv[]){
 		int new_hosts_num = 1;
 		char *ptr = strtok(new_hosts_array, delim);
 		int cur_day = 1;
+		int stats[5] = {0};
 		while(ptr != NULL)
 		{
 			int new_hosts_this_day = max(atoi(ptr), 0);
@@ -237,6 +258,8 @@ int main(int argc, char *argv[]){
 				fprintf(fd, "        <argument value=\"%d\"/>  ", i); 				// <!-- Cluster number-->		
 				fprintf(fd, "\n"); 		
 				fprintf(fd, "        <argument value=\"%d\"/>  ", cur_day); 				// <!-- Day when the host should join-->		
+				fprintf(fd, "\n"); 	
+				fprintf(fd, "        <argument value=\"%d\"/>  ", generate_type(percantage_by_type, stats)); 				// <!-- Host type-->		
 				fprintf(fd, "\n"); 	
 				if(fd_traces != NULL){
 					fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
@@ -257,6 +280,8 @@ int main(int argc, char *argv[]){
 			fprintf(fd, "\n"); 		
 			fprintf(fd, "        <argument value=\"%d\"/>  ", 0); 				// <!-- Day when the host should join-->		
 			fprintf(fd, "\n"); 	
+			fprintf(fd, "        <argument value=\"%d\"/>  ", generate_type(percantage_by_type, stats)); 				// <!-- Host type-->		
+			fprintf(fd, "\n"); 
 			if(fd_traces != NULL){
 				fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
 				fprintf(fd, "\n");
@@ -264,6 +289,10 @@ int main(int argc, char *argv[]){
 			fprintf(fd, "   </process> ");
 			fprintf(fd, "\n");
 		}
+		for(int j = 0; j < 5; j++) {
+			printf("%d ", stats[j]);
+		}
+		printf("\n");
 		if(fd_traces !=  NULL) fclose(fd_traces);	
 	}
 

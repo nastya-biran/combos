@@ -14,5 +14,5 @@ double ran_gamma_int (const unsigned int a);
 double gamma_large (const double a);
 double gamma_frac (const double a);
 double ran_distri(char num, double a, double b);
-
+double bimodal_ran_distri(double prob1, char num1, double a1, double b1, char num2, double a2, double b2) ;
 

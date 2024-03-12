@@ -32,6 +32,10 @@ ndata_servers=($(cat parameters.xml | grep -oP '(?<=ndata_servers>)[^<]+'))
 
 n_groups=($(cat parameters.xml | grep -oP '(?<=n_groups>)[^<]+'))
 n_clients=($(cat parameters.xml | grep -oP '(?<=n_clients>)[^<]+'))
+p_reliable=($(cat parameters.xml | grep -oP '(?<=p_reliable>)[^<]+'))
+p_periodic=($(cat parameters.xml | grep -oP '(?<=p_periodic>)[^<]+'))
+p_unreliable=($(cat parameters.xml | grep -oP '(?<=p_unreliable>)[^<]+'))
+p_usual=($(cat parameters.xml | grep -oP '(?<=p_usual>)[^<]+'))
 connection_interval=($(cat parameters.xml | grep -oP '(?<=connection_interval>)[^<]+'))
 scheduling_interval=($(cat parameters.xml | grep -oP '(?<=scheduling_interval>)[^<]+'))
 gbw=($(cat parameters.xml | grep -oP '(?<=gbw>)[^<]+'))
@@ -190,6 +194,10 @@ do
   arg2[j++]=${n_clients[$i]}
   arg2[j++]=${att_projs[$i]}
   arg2[j++]=${traces_file[$i]}
+  arg2[j++]=${p_reliable[$i]}
+  arg2[j++]=${p_periodic[$i]}
+  arg2[j++]=${p_usual[$i]}
+  arg2[j++]=${p_unreliable[$i]}
   arg2[j++]=${connection_interval[$i]}
   arg2[j++]=${scheduling_interval[$i]}
   arg2[j++]=${max_speed[$i]}

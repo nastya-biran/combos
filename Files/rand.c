@@ -269,4 +269,13 @@ double ran_distri(char num, double a, double b){
 	return 0;
 }
 
+double bimodal_ran_distri(double prob1, char num1, double a1, double b1, char num2, double a2, double b2) {
+  if (uniform_ab(0, 1) < prob1) {
+    return ran_distri(num1, a1, b1);
+  } 
+  else {
+    return ran_distri(num2, a2, b2);
+  }
+}
+
 

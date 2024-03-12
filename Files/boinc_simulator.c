@@ -21,6 +21,7 @@
 
 /* BOINC architecture simulator */
 
+#include <assert.h>
 #include <stdio.h>
 #include <locale.h>		// Big numbers nice output
 #include <math.h>
@@ -38,7 +39,7 @@ XBT_LOG_NEW_DEFAULT_CATEGORY(boinc_simulator, "Messages specific for this boinc 
 
 #define MAX_SHORT_TERM_DEBT 86400
 #define MAX_TIMEOUT_SERVER 86400*365 	// One year without client activity, only to finish simulation for a while
-#define MAX_SIMULATED_TIME 100		// Simulation time in hours
+#define MAX_SIMULATED_TIME 1000		// Simulation time in hours
 #define WORK_FETCH_PERIOD 60		// Work fetch period
 #define KB 1024				// 1 KB in bytes
 #define PRECISION 0.00001		// Accuracy (used in client_work_fetch())
@@ -204,10 +205,18 @@ struct task {
 	double sim_remains;
 };
 
+enum HOST_TYPE{
+	RELIABLE,
+	PERIODIC,
+	USUAL,
+	UNRELIABLE
+};
+
 /* Client */
 struct client {
 	const char *name;
 	int join_day;
+	int type; // type depending on availability: reliable, periodic, usual, unreliable
 	xbt_dict_t projects;		// all projects of client
 	xbt_heap_t deadline_missed;
 	project_t running_project; 
@@ -292,6 +301,7 @@ struct project_database{
 	/* Clients statistics*/
 
 	int32_t *clients_availability;
+	FILE* clients_availability_fd;
 
 	/* Work generator */
 
@@ -657,9 +667,9 @@ int print_results(){
 		FILE *task_dynamic_file = fopen("../exp/task_dynamic", "w+");
 		for(j=0; j<sim_duration; j++) fprintf(task_dynamic_file, "%d\n", database->valid_workunits_timestamps[j]);	
 		fclose(task_dynamic_file);
-		FILE *clients_dynamic_file = fopen("../exp/clients_dynamic", "w+");
+		/*FILE *clients_dynamic_file = fopen("../exp/clients_dynamic", "w+");
 		for(j=0; j<sim_duration; j++) fprintf(clients_dynamic_file, "%d\n", database->clients_availability[j]);	
-		fclose(clients_dynamic_file);
+		fclose(clients_dynamic_file);*/
 	}
 
 	return 0;
@@ -720,6 +730,7 @@ int init_database(int argc, char *argv[])
 	database->data_servers = xbt_new0(char*, (int) database->ndata_servers);
 	database->valid_workunits_timestamps = xbt_new0(int32_t, 10000000);
 	database->clients_availability = xbt_new0(int32_t, 10000000);
+	database->clients_availability_fd = fopen("../exp/clients_dynamic", "w+");
 	for(i=0; i<database->ndata_servers; i++)
 		database->data_servers[i] = bprintf("d%" PRId32 "%" PRId32, project_number+1, i);
 
@@ -1865,7 +1876,8 @@ static void client_clean_short_debt(const client_t client)
 
 }
 
-static void client_update_debt(client_t client)
+static void 
+client_update_debt(client_t client)
 {
 	double a, w, w_short;
 	double total_debt_short = 0;
@@ -2288,7 +2300,7 @@ static client_t client_new(int argc, char *argv[])
 	client->group_number = group_number = (int32_t)atoi(argv[index++]);
 
 	// Initialize values
-	if(argc > 4)
+	if(argc > 5)
 	{
 		_group_info[group_number].group_speed = (int32_t) MSG_get_host_speed(MSG_host_self()); 
 		_group_info[group_number].n_clients = (int32_t)atoi(argv[index++]);		
@@ -2318,7 +2330,8 @@ static client_t client_new(int argc, char *argv[])
 			xbt_cond_wait(_group_info[group_number].cond, _group_info[group_number].mutex);
 		xbt_mutex_release(_group_info[group_number].mutex);
 		client->join_day = atoi(argv[index++]);
-		if(argc == 4) aux = atof(argv[index]);
+		client->type = atoi(argv[index++]);
+		if(argc == 5) aux = atof(argv[index]);
 	}
 
 	if(aux == -1){
@@ -2365,10 +2378,9 @@ static client_t client_new(int argc, char *argv[])
 	client->initialized = 0;
 	client->n_projects = 0;
 
-	if (client->join_day != 0) {
-		double join_time = client->join_day * 24 + uniform_ab(0, min(24, (sim_duration - MSG_get_clock()) / 3600.0));
-		MSG_process_sleep(join_time * 3600);
-	}
+	double join_time = client->join_day * 24 + uniform_ab(0, min(24, (sim_duration - MSG_get_clock()) / 3600.0));
+	MSG_process_sleep(join_time * 3600);
+
 	work_string = bprintf("work_fetch:%s\n", client->name);
 	client->work_fetch_thread = MSG_process_create(work_string, client_work_fetch, client, MSG_host_self());
 	xbt_free(work_string);
@@ -2395,6 +2407,44 @@ static client_t client_new(int argc, char *argv[])
 	xbt_mutex_release(client->mutex_init);
 
 	return client;
+}
+
+double generate_availability(int client_type, char default_distri, double a, double b) {
+	switch (client_type) {
+		case RELIABLE: {
+			return sim_duration - MSG_get_clock();
+		}
+		case PERIODIC: {
+			return ran_distri(3, 8, 1) * 3600;
+		}
+		case USUAL: {
+			return ran_distri( 3, 3, 1) * 3600;
+		}
+		case UNRELIABLE: {
+			return ran_distri(5, 1.5, 0) * 3600;
+		}
+	}
+	assert(1);
+	return 0;
+}
+
+double generate_unavailability(int client_type, char default_distri, double a, double b) {
+	switch (client_type) {
+		case RELIABLE: {
+			return 0;
+		}
+		case PERIODIC: {
+			return bimodal_ran_distri(0.95, 3, 16, 1, 3, 168, 48) * 3600;
+		}
+		case USUAL: {
+			return bimodal_ran_distri(0.9, 3, 3, 1, 3, 336, 168) * 3600;
+		}
+		case UNRELIABLE: {
+			return sim_duration - MSG_get_clock();
+		}
+	}
+	assert(1);
+	return 0;
 }
 
 // Main client function
@@ -2427,20 +2477,22 @@ int client(int argc, char *argv[])
 			working = 1;
 			pdatabase_t database = &_pdatabase[0];
 			database->clients_availability[(int32_t)MSG_get_clock()] += 1;
-			random = (ran_distri(_group_info[client->group_number].av_distri, _group_info[client->group_number].aa_param, _group_info[client->group_number].ab_param)*3600.0);
+			random = generate_availability(client->type, _group_info[client->group_number].av_distri, _group_info[client->group_number].aa_param, _group_info[client->group_number].ab_param);
 			random = max(random, 0);
 			if(ceil(random + MSG_get_clock()) >= sim_duration){
 				//printf("%f\n", random);
 				random = (double)max(sim_duration - MSG_get_clock(), 0);
 			}
-			//FILE* availability = fopen("../exp/availability", "a+");
-			//fprintf(availability, "%0.1f\n", random / 3600);
-			//fclose(availability);
+			FILE* availability = fopen("../exp/availability", "a+");
+			fprintf(availability, "%d %0.1f\n", client->type, random / 3600);
+			fclose(availability);
+			fprintf(database->clients_availability_fd, "%d +%0.1f\n", client->type, MSG_get_clock());
 			//printf("%0.1f\n", random);
 			available+=random;
 			//printf("Weibull: %f\n", random);
 			time = MSG_get_clock() + random;
 			database->clients_availability[(int32_t)time] -= 1;
+			fprintf(database->clients_availability_fd, "%d -%0.1f\n", client->type, time);
 		}
 #endif	
 
@@ -2466,7 +2518,7 @@ int client(int argc, char *argv[])
 		//printf("time: %g\n", time); 
 		if(working && ceil(MSG_get_clock()) >= time){
 			working = 0;
-			random = (ran_distri(_group_info[client->group_number].nv_distri, _group_info[client->group_number].na_param, _group_info[client->group_number].nb_param)*3600.0);
+			random = generate_unavailability(client->type, _group_info[client->group_number].nv_distri, _group_info[client->group_number].na_param, _group_info[client->group_number].nb_param);
 
 			random = max(random, 0);
 			if(ceil(random+MSG_get_clock()) > sim_duration){
@@ -2474,9 +2526,9 @@ int client(int argc, char *argv[])
 				random = max(sim_duration-MSG_get_clock(), 0);
 				working = 1;
 			}
-			//FILE* unavailability = fopen("../exp/unavailability", "a+");
-			//fprintf(unavailability, "%0.1f\n", random / 3600);
-			//fclose(unavailability);
+			FILE* unavailability = fopen("../exp/unavailability", "a+");
+			fprintf(unavailability, "%d %0.1f\n", client->type, random / 3600);
+			fclose(unavailability);
 			
 			notavailable += random;
 			//printf("Lognormal: %f\n", random);
