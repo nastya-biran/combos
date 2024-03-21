@@ -97,25 +97,91 @@ echo "Done"
 declare -a arg1	# Platform arguments
 declare -a arg2	# Deployment arguments
 declare -a arg3 # boinc_simulator args
+declare -a hosts_overall 
 
+
+let j=0
+
+arg2[j++]=${n_projects}
+arg2[j++]=${simulation_time}
+
+# Server arguments
+for ((i=0; i<n_projects; i++))
+do
+	arg2[j++]=${snumber[$i]}
+	arg2[j++]=${name[$i]}
+	arg2[j++]=${output_file_size[$i]}
+	arg2[j++]=${task_fpops[$i]}
+	arg2[j++]=${ifgl_percentage[$i]}
+	arg2[j++]=${ifcd_percentage[$i]}
+	arg2[j++]=${min_quorum[$i]}
+	arg2[j++]=${target_nresults[$i]}
+	arg2[j++]=${max_error_results[$i]}
+	arg2[j++]=${max_total_results[$i]}
+	arg2[j++]=${max_success_results[$i]}
+	arg2[j++]=${delay_bound[$i]}	
+	arg2[j++]=${success_percentage[$i]}
+	arg2[j++]=${canonical_percentage[$i]}		
+	arg2[j++]=${input_file_size[$i]}
+	arg2[j++]=${disk_bw[$i]}
+	arg2[j++]=${ndata_servers[$i]}	
+	arg2[j++]=${replication[$i]}
+	arg2[j++]=${nscheduling_servers[$i]}		
+done
+
+arg2[j++]=${n_groups}
+
+# Client parameters
+for ((i=0, l=0; i<n_groups; i++))
+do
+  arg2[j++]=${n_clients[$i]}
+  arg2[j++]=${nh_distri[$i]}
+  arg2[j++]=${ha_param[$i]}
+  arg2[j++]=${hb_param[$i]}
+  arg2[j++]=${att_projs[$i]}
+  arg2[j++]=${traces_file[$i]}
+  arg2[j++]=${p_reliable[$i]}
+  arg2[j++]=${p_periodic[$i]}
+  arg2[j++]=${p_usual[$i]}
+  arg2[j++]=${p_unreliable[$i]}
+  arg2[j++]=${connection_interval[$i]}
+  arg2[j++]=${scheduling_interval[$i]}
+  arg2[j++]=${max_speed[$i]}
+  arg2[j++]=${min_speed[$i]}
+  arg2[j++]=${pv_distri[$i]}
+  arg2[j++]=${pa_param[$i]}
+  arg2[j++]=${pb_param[$i]}
+  arg2[j++]=${av_distri[$i]}
+  arg2[j++]=${aa_param[$i]}
+  arg2[j++]=${ab_param[$i]}
+  arg2[j++]=${nv_distri[$i]}
+  arg2[j++]=${na_param[$i]}
+  arg2[j++]=${nb_param[$i]}
+  for((k=0; k<att_projs[i]; k++, l++))
+  do
+	arg2[j++]=${pnumber[$l]}
+	arg2[j++]=${priority[$l]}	
+  done
+done
+
+##### Deployment ######
+
+echo -n "Creating deployment.xml... "
+cd Files
+read -a hosts_overall <<< $(./create_deployment ${arg2[@]})
+echo "${hosts_overall[*]}"
+echo "Done"
+
+let j=0
 arg1[j++]=${n_groups}
 
 # Cluster arguments
-chmod +x ./Files/rand_and_print.o
-((new_host_days=${simulation_time} / 24 - 1))
-declare -a new_hosts
 for ((i=0; i<n_groups; i++))
 do
-	for ((j=0; j<new_host_days; j++))
-	do
-		new_hosts_per_day=$(./Files/random ${nh_distri} ${ha_param} ${hb_param})
-		((n_clients[i]+=${new_hosts_per_day}))
-		new_hosts[i]+="${new_hosts_per_day};"
-	done
-	((total_clients+=${n_clients[$i]}))
+	((total_clients+=${hosts_overall[$i]}))
 	arg1[j++]=${glatency[$i]}
 	arg1[j++]=${gbw[$i]}
-	arg1[j++]=${n_clients[$i]}
+	arg1[j++]=${hosts_overall[$i]}
 done
 
 arg1[j++]=${n_projects}
@@ -153,76 +219,8 @@ done
 echo -n "Creating platform.xml... "
 
 ##### Platform ######
-cd Files
 ./create_platform ${arg1[@]}
 
-echo "Done"
-
-let j=0
-
-arg2[j++]=${n_projects}
-
-# Server arguments
-for ((i=0; i<n_projects; i++))
-do
-	arg2[j++]=${snumber[$i]}
-	arg2[j++]=${name[$i]}
-	arg2[j++]=${output_file_size[$i]}
-	arg2[j++]=${task_fpops[$i]}
-	arg2[j++]=${ifgl_percentage[$i]}
-	arg2[j++]=${ifcd_percentage[$i]}
-	arg2[j++]=${min_quorum[$i]}
-	arg2[j++]=${target_nresults[$i]}
-	arg2[j++]=${max_error_results[$i]}
-	arg2[j++]=${max_total_results[$i]}
-	arg2[j++]=${max_success_results[$i]}
-	arg2[j++]=${delay_bound[$i]}	
-	arg2[j++]=${success_percentage[$i]}
-	arg2[j++]=${canonical_percentage[$i]}		
-	arg2[j++]=${input_file_size[$i]}
-	arg2[j++]=${disk_bw[$i]}
-	arg2[j++]=${ndata_servers[$i]}	
-	arg2[j++]=${replication[$i]}
-	arg2[j++]=${nscheduling_servers[$i]}		
-done
-
-arg2[j++]=${n_groups}
-
-# Client parameters
-for ((i=0, l=0; i<n_groups; i++))
-do
-  arg2[j++]=${n_clients[$i]}
-  arg2[j++]=${att_projs[$i]}
-  arg2[j++]=${traces_file[$i]}
-  arg2[j++]=${p_reliable[$i]}
-  arg2[j++]=${p_periodic[$i]}
-  arg2[j++]=${p_usual[$i]}
-  arg2[j++]=${p_unreliable[$i]}
-  arg2[j++]=${connection_interval[$i]}
-  arg2[j++]=${scheduling_interval[$i]}
-  arg2[j++]=${max_speed[$i]}
-  arg2[j++]=${min_speed[$i]}
-  arg2[j++]=${pv_distri[$i]}
-  arg2[j++]=${pa_param[$i]}
-  arg2[j++]=${pb_param[$i]}
-  arg2[j++]=${av_distri[$i]}
-  arg2[j++]=${aa_param[$i]}
-  arg2[j++]=${ab_param[$i]}
-  arg2[j++]=${nv_distri[$i]}
-  arg2[j++]=${na_param[$i]}
-  arg2[j++]=${nb_param[$i]}
-  for((k=0; k<att_projs[i]; k++, l++))
-  do
-	arg2[j++]=${pnumber[$l]}
-	arg2[j++]=${priority[$l]}	
-  done
-  arg2[j++]=${new_hosts[$i]}
-done
-
-##### Deployment ######
-
-echo -n "Creating deployment.xml... "
-./create_deployment ${arg2[@]}
 echo "Done"
 
 cd ..
@@ -232,7 +230,7 @@ for ((i=0, k=0, l=0; i<n_groups; i++))
 do
   for((j=0; j<att_projs[$i]; j++, k++))
   do
-	((arg3[${pnumber[$k]}]+=${n_clients[$i]}))
+	((arg3[${pnumber[$k]}]+=${hosts_overall[$i]}))
   done
 done
 

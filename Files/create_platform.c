@@ -69,6 +69,7 @@ int main(int argc, char *argv[]){
 	
 	fprintf(fd, "\n");
 
+
 	// Links
 	for(i=0, k=0; i<n_clusters; i++){
 		att_proj[i] = atoi(argv[index++]);

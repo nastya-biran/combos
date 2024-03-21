@@ -39,7 +39,7 @@ XBT_LOG_NEW_DEFAULT_CATEGORY(boinc_simulator, "Messages specific for this boinc 
 
 #define MAX_SHORT_TERM_DEBT 86400
 #define MAX_TIMEOUT_SERVER 86400*365 	// One year without client activity, only to finish simulation for a while
-#define MAX_SIMULATED_TIME 1000		// Simulation time in hours
+#define MAX_SIMULATED_TIME 100		// Simulation time in hours
 #define WORK_FETCH_PERIOD 60		// Work fetch period
 #define KB 1024				// 1 KB in bytes
 #define PRECISION 0.00001		// Accuracy (used in client_work_fetch())
@@ -667,6 +667,7 @@ int print_results(){
 		FILE *task_dynamic_file = fopen("../exp/task_dynamic", "w+");
 		for(j=0; j<sim_duration; j++) fprintf(task_dynamic_file, "%d\n", database->valid_workunits_timestamps[j]);	
 		fclose(task_dynamic_file);
+		printf("written\n");
 		/*FILE *clients_dynamic_file = fopen("../exp/clients_dynamic", "w+");
 		for(j=0; j<sim_duration; j++) fprintf(clients_dynamic_file, "%d\n", database->clients_availability[j]);	
 		fclose(clients_dynamic_file);*/

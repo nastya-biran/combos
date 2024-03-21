@@ -9,25 +9,35 @@
 #include <string.h>
 #include "xbt/sysdep.h"
 
-double getrow(FILE *fd){
+struct host_power {
+	int cores;
+	double core_power;
+};
+
+struct host_power get_host_power(FILE *fd){
 	char *line = NULL;
 	size_t len = 0;
-	double result = -1;
 
 	while(getline(&line, &len, fd) == -1){
 		rewind(fd);	
 	}
-
-	if(line != NULL){
-		result = atof(line);
-	}
+	
+	struct host_power power;
+	char* ptr = strtok(line, " ");
+	power.cores = atoi(ptr);
+	ptr = strtok(NULL, " ");
+	power.core_power = atof(ptr);
 	free(line);
 
-	return result;
+	return power;
 }
 
 int generate_type(double* percentages, int* stats) {
-	double rand = uniform_ab(0, 100);
+	int overall_sum = 0;
+	for (int i = 0; i < 4; i++) {
+		overall_sum += percentages[i];
+	}
+	double rand = uniform_ab(0, overall_sum);
 	double sum = 0;
 	for (int i = 0; i < 4; i++) {
 		sum += percentages[i];
@@ -40,7 +50,30 @@ int generate_type(double* percentages, int* stats) {
 	return -1;
 }
 
-
+int print_host(FILE* fd, int cluster_num, int host_num, double* percentage_by_type, int day, FILE* fd_traces, int* stats) {
+	struct host_power power = get_host_power(fd_traces);
+	int typ = generate_type(percentage_by_type, stats);
+	for (int i = 0; i < power.cores; i++) {
+		fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", cluster_num+1, host_num + i);
+		fprintf(fd, "\n");
+		fprintf(fd, "        <argument value=\"%d\"/>  ", cluster_num); 				// <!-- Cluster number-->		
+		fprintf(fd, "\n"); 		
+		fprintf(fd, "        <argument value=\"%d\"/>  ", day); 				// <!-- Day when the host should join-->		
+		fprintf(fd, "\n"); 	
+		fprintf(fd, "        <argument value=\"%d\"/>  ", typ); 				// <!-- Host type-->		
+		fprintf(fd, "\n"); 
+		if(fd_traces != NULL){
+			fprintf(fd, "        <argument value=\"%f\"/>  ", power.core_power); 		// <!-- Host power -->		
+			fprintf(fd, "\n");
+		} else {
+			printf("Host power traces not provided");
+			exit(1);
+		}
+		fprintf(fd, "   </process> ");
+		fprintf(fd, "\n");
+	}
+	return power.cores;
+}
 
 int main(int argc, char *argv[]){
 	
@@ -74,6 +107,7 @@ int main(int argc, char *argv[]){
 	fprintf(fd, "\n");
 
 	n_projects = atoi(argv[index++]);
+	int simulation_duration = atoi(argv[index++]);
 	
 	for(i=0; i<n_projects; i++){
 		fprintf(fd, "   <process host=\"b%s\" function=\"init_database\"> ", argv[index]);
@@ -183,6 +217,9 @@ int main(int argc, char *argv[]){
 	/* PRINT CLIENTS*/
 	for(i=0; i<n_clusters;i++){
 		int n_clients = atoi(argv[index++]);
+		int new_hosts_distribution = atoi(argv[index++]);
+		double new_hosts_param_a = atof(argv[index++]);
+		double new_hosts_param_b = atof(argv[index++]);
 		int att_projs = atoi(argv[index++]);
 		char* traces_file = bprintf("../%s", argv[index++]);
 		FILE *fd_traces = fopen(traces_file, "r");
@@ -192,12 +229,41 @@ int main(int argc, char *argv[]){
 			percantage_by_type[j] = atof(argv[index++]);
 		}
 
+		// Process initial clients
+		int stats[5] = {0};
+		int overall_clients = 0;
+		for(j=1; j<=n_clients; j++){
+			overall_clients += print_host(fd, i, overall_clients + 1, percantage_by_type, 0, fd_traces, stats);
+		}
+		//Process new clients
+		// Do not generate new reliable hosts 
+		for(int j = 0; j < 5; j++) {
+			fprintf(stderr,"%d ", stats[j]);
+		}
+		percantage_by_type[0] = 0;
+		int new_hosts = 0;
+		for (int day = 1; day <= simulation_duration / 24; day++)
+		{
+			int new_hosts_this_day = ran_distri(new_hosts_distribution, new_hosts_param_a, new_hosts_param_b);
+			new_hosts += new_hosts_this_day;
+			for (size_t k = 0; k < new_hosts_this_day; k++) {
+				overall_clients += print_host(fd, i, overall_clients + 1, percantage_by_type, day, fd_traces, stats);
+			}
+		}
+		fprintf(stderr, " new hosts %d\n", new_hosts);
+		for(int j = 0; j < 5; j++) {
+			fprintf(stderr,"%d ", stats[j]);
+		}
+		fprintf(stderr, "\n");
+		fprintf(stderr, "%d\n", n_clients);
+		printf("%d ", overall_clients);
+
 		// READ LINE
 		fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, 0);
 		fprintf(fd, "\n");
 		fprintf(fd, "        <argument value=\"%d\"/>  ", i); 		// <!-- Cluster number-->
 		fprintf(fd, "\n");
-		fprintf(fd, "        <argument value=\"%d\"/>  ", n_clients); 	// <!-- Number of clients -->
+		fprintf(fd, "        <argument value=\"%d\"/>  ", overall_clients); 	// <!-- Number of clients -->
 		fprintf(fd, "\n");
 				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- ConnectionInterval -->
 		fprintf(fd, "\n");
@@ -209,24 +275,25 @@ int main(int argc, char *argv[]){
 		fprintf(fd, "\n");               
 		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Sp. random distribution -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Av. random distribution -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Av. random distribution -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Nav. random distribution -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- Nav. random distribution -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- A argument -->
 		fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
+		fprintf(fd, "        <argument value=\"%s\"/>  ", argv[index++]); // <!-- B argument -->
+		struct host_power power = get_host_power(fd_traces);
 		fprintf(fd, "\n");
-				if(fd_traces != NULL){
-			fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
+		if(fd_traces != NULL){
+			fprintf(fd, "        <argument value=\"%f\"/>  ", power.cores * power.core_power); 		// <!-- Host power -->		
 			fprintf(fd, "\n");
 		}	
 		fprintf(fd, "        <argument value=\"%d\"/>", att_projs);	// <!-- Number of projects attached -->
@@ -241,58 +308,6 @@ int main(int argc, char *argv[]){
 		}
 		fprintf(fd, "   </process> ");
 		fprintf(fd, "\n");
-
-		//Process new clients
-		char* new_hosts_array = argv[index++];
-		char* delim = ";";
-		int new_hosts_num = 1;
-		char *ptr = strtok(new_hosts_array, delim);
-		int cur_day = 1;
-		int stats[5] = {0};
-		while(ptr != NULL)
-		{
-			int new_hosts_this_day = max(atoi(ptr), 0);
-			for (size_t k = 0; k < new_hosts_this_day; k++) {
-				fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, new_hosts_num);
-				fprintf(fd, "\n");
-				fprintf(fd, "        <argument value=\"%d\"/>  ", i); 				// <!-- Cluster number-->		
-				fprintf(fd, "\n"); 		
-				fprintf(fd, "        <argument value=\"%d\"/>  ", cur_day); 				// <!-- Day when the host should join-->		
-				fprintf(fd, "\n"); 	
-				fprintf(fd, "        <argument value=\"%d\"/>  ", generate_type(percantage_by_type, stats)); 				// <!-- Host type-->		
-				fprintf(fd, "\n"); 	
-				if(fd_traces != NULL){
-					fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
-					fprintf(fd, "\n");
-				}	
-				fprintf(fd, "   </process> ");
-				fprintf(fd, "\n");
-				new_hosts_num++;
-			}
-			cur_day++;
-			ptr = strtok(NULL, delim);
-		}
-		// Process initial clients
-		for(j=1; j<n_clients - new_hosts_num + 1; j++){
-			fprintf(fd, "   <process host=\"c%d%d\" function=\"client\"> ", i+1, j + new_hosts_num);
-			fprintf(fd, "\n");
-			fprintf(fd, "        <argument value=\"%d\"/>  ", i); 				// <!-- Cluster number-->		
-			fprintf(fd, "\n"); 		
-			fprintf(fd, "        <argument value=\"%d\"/>  ", 0); 				// <!-- Day when the host should join-->		
-			fprintf(fd, "\n"); 	
-			fprintf(fd, "        <argument value=\"%d\"/>  ", generate_type(percantage_by_type, stats)); 				// <!-- Host type-->		
-			fprintf(fd, "\n"); 
-			if(fd_traces != NULL){
-				fprintf(fd, "        <argument value=\"%f\"/>  ", getrow(fd_traces)); 		// <!-- Host power -->		
-				fprintf(fd, "\n");
-			}	
-			fprintf(fd, "   </process> ");
-			fprintf(fd, "\n");
-		}
-		for(int j = 0; j < 5; j++) {
-			printf("%d ", stats[j]);
-		}
-		printf("\n");
 		if(fd_traces !=  NULL) fclose(fd_traces);	
 	}
 

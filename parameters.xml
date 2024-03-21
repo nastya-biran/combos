@@ -1,4 +1,4 @@
-<simulation_time>1000</simulation_time>			 <!-- Simulation time in hours -->
+<simulation_time>100</simulation_time>			 <!-- Simulation time in hours -->
 
 <!-- Server side -->
 <server_side>
@@ -31,7 +31,7 @@
 <client_side>
 	<n_groups>1</n_groups>					<!-- Number of groups -->
 	<group>
-		<n_clients>15000</n_clients>			 <!-- Number of clients of the cluster -->
+		<n_clients>1000</n_clients>			 <!-- Number of clients of the cluster -->
 		<p_reliable> 10 </p_reliable>			 <!-- Percentage of reliable hosts -->
 		<p_periodic> 40 </p_periodic>			 <!-- Percentage of periodic hosts -->
 		<p_usual> 40 </p_usual>			 		 <!-- Percentage of usual hosts -->
@@ -40,7 +40,7 @@
 		<scheduling_interval>3600</scheduling_interval>	<!-- Scheduling interval -->
 		<gbw>1Gbps</gbw>				<!-- Cluster link bandwidth in bps -->
 		<glatency>10ms</glatency>			<!-- Cluster link latency -->
-		<traces_file>/Traces/asteroids/unsorted</traces_file>			<!-- Host power traces file -->
+		<traces_file>Traces/asteroids/all_traces</traces_file>			<!-- Host power traces file -->
 		<max_speed>337</max_speed>			<!-- Maximum host speed in GFlops -->
 		<min_speed>3</min_speed>			<!-- Minumum host speed in GFlops -->
 		<pv_distri>5</pv_distri>			<!-- Speed fit distribution [ran_weibull, ran_gamma, ran_lognormal, normal, hyperx, exponential] -->
@@ -53,8 +53,8 @@
 		<na_param>3</na_param>			<!-- A -->
 		<nb_param>1</nb_param>			<!-- B -->
 		<nh_distri>3</nh_distri>			<!-- New hosts per day fit distribution [ran_weibull, ran_gamma, ran_lognormal, normal, hyperx, exponential] -->
-		<ha_param>80</ha_param>				<!-- A -->
-		<hb_param>10</hb_param>				<!-- B -->
+		<ha_param>10</ha_param>				<!-- A -->
+		<hb_param>5</hb_param>				<!-- B -->
 		<att_projs>1</att_projs>			<!-- Number of projects attached -->
 		<gproject>
 			<pnumber>0</pnumber>			<!-- Project number -->
