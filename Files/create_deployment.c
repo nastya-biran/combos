@@ -244,7 +244,8 @@ int main(int argc, char *argv[]){
 		int new_hosts = 0;
 		for (int day = 1; day <= simulation_duration / 24; day++)
 		{
-			int new_hosts_this_day = ran_distri(new_hosts_distribution, new_hosts_param_a, new_hosts_param_b);
+			int random = ran_distri(new_hosts_distribution, new_hosts_param_a, new_hosts_param_b);
+			int new_hosts_this_day = max(random, 0);
 			new_hosts += new_hosts_this_day;
 			for (size_t k = 0; k < new_hosts_this_day; k++) {
 				overall_clients += print_host(fd, i, overall_clients + 1, percantage_by_type, day, fd_traces, stats);
