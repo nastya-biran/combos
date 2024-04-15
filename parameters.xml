@@ -1,4 +1,4 @@
-<simulation_time>1000</simulation_time>			 <!-- Simulation time in hours -->
+<simulation_time>1500</simulation_time>			 <!-- Simulation time in hours -->
 
 <!-- Server side -->
 <server_side>
@@ -16,7 +16,7 @@
 		<task_fpops>108430000000000</task_fpops>		<!-- Task duration in flops -->
 		<output_file_size>1000000</output_file_size>	<!-- Answer size in bytes -->
 		<min_quorum>2</min_quorum>			<!-- Number of times a workunit must be received in order to validate it-->
-		<target_nresults>2</target_nresults>		<!-- Number of results to create initially -->
+		<target_nresults>10</target_nresults>			 <!-- Number of results to create initially -->
 		<max_error_results>7</max_error_results>	<!-- Max number of erroneous results -->
 		<max_total_results>20</max_total_results>	<!-- Max number of total results -->
 		<max_success_results>20</max_success_results>	<!-- Max number of success results -->
