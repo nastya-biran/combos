@@ -41,7 +41,7 @@ XBT_LOG_NEW_DEFAULT_CATEGORY(boinc_simulator, "Messages specific for this boinc 
 
 #define MAX_SHORT_TERM_DEBT 86400
 #define MAX_TIMEOUT_SERVER 86400*365 	// One year without client activity, only to finish simulation for a while
-#define MAX_SIMULATED_TIME 1500		// Simulation time in hours
+#define MAX_SIMULATED_TIME 120		// Simulation time in hours
 #define WORK_FETCH_PERIOD 60		// Work fetch period
 #define KB 1024				// 1 KB in bytes
 #define PRECISION 0.00001		// Accuracy (used in client_work_fetch())
@@ -131,11 +131,13 @@ struct result {
 /* Message to data server */
 struct dsmessage {
 	message_type type;		// REQUEST, REPLY, TERMINATION
+	int32_t application;
 	char *answer_mailbox;		// Answer mailbox
 };
 
 /* Workunit */
 struct workunit{
+	int32_t application; // Associated application
 	char *number;			// Workunit number
 	workunit_status status;		// ERROR, IN_PROGRESS, VALID
 	char ntotal_results;		// Number of created results
@@ -193,6 +195,7 @@ struct project {
 /* Task */
 struct task {
 	char *workunit;			// Workunit of the task
+	int32_t application;
 	char *name;			// Task name
 	char scheduled;			// Task scheduled (it is in tasks_ready list) [0,1]
 	char running;			// Task is actually running on cpu [0,1]
@@ -219,6 +222,7 @@ enum HOST_TYPE{
 /* Client */
 struct client {
 	const char *name;
+	double work_fetch_multiplicator;
 	int join_day;
 	int type; // type depending on availability: reliable, periodic, usual, unreliable
 	xbt_dict_t projects;		// all projects of client
@@ -251,6 +255,8 @@ struct client {
 struct application {
 	/* Redundancy and scheduling attributes */
 
+	double percentage; /* Percantage of workunits in the project belonging to this application*/
+
 	int32_t min_quorum;		// Minimum number of successful results required for the validator. If a scrict majority agree, they are considered correct
 	int32_t target_nresults;	// Number of results to create initially per workunit
 	int32_t max_error_results;	// If the number of client error results exeed this, the workunit is declared to have an error
@@ -267,6 +273,22 @@ struct application {
 	int64_t input_file_size;	// Size of the input files needed for a result associated with a workunit of this project 	
 	int64_t output_file_size;	// Size of the output files needed for a result associated with a workunit of this project
 	int64_t job_duration;		// Job length in FLOPS
+
+	/* Workunit statistics */
+
+	int64_t nworkunits;		// Number of workunits created
+	int64_t nvalid_workunits;	// Number of workunits validated
+	int64_t nvalid_workunits_not_finished;
+	int64_t nerror_workunits;	// Number of erroneous workunits
+	int32_t *valid_workunits_timestamps;
+	int32_t *valid_completed_workunits_timestamps;
+	int32_t *creation_workunit_timestamps;
+
+	int64_t workunits_number; // Number of workunits generate in one period
+	int64_t sleep_time; // Sleep time between periods
+	int32_t is_on;
+	double suspended_until;
+	int32_t nworkunits_cur;
 };
 
 /* Project database */
@@ -283,6 +305,10 @@ struct project_database{
 	int32_t nclients;		// Number of clients	
 	int32_t nfinished_clients;	// Number of finished clients
 	int64_t disk_bw;		// Disk bandwidth of data servers
+
+	/*Applications */
+	int32_t applications_num;
+	application_t applications;
 
 	/* Result statistics */	
 
@@ -674,13 +700,22 @@ int print_results(){
 		printf("  Workunits valid but not completed: \t\t%'" PRId64 " (%0.1f%%)\n", database->nvalid_workunits_not_finished, (double)database->nvalid_workunits_not_finished/database->nworkunits*100);
 		printf("  Workunits error: \t\t%'" PRId64 " (%0.1f%%)\n", database->nerror_workunits, (double)database->nerror_workunits/database->nworkunits*100);	
 		printf("  Throughput: \t\t\t%'0.1f mens/s\n", (double)database->nmessages_received/sim_duration);
-		printf("  Credit granted: \t\t%'" PRId64 " credits\n", (long int)database->total_credit);
-		printf("  FLOPS average: \t\t%'" PRId64 " GFLOPS\n\n", (int64_t)((double)database->nvalid_results*(double)database->job_duration/sim_duration/1000000000.0));	
-		FILE *task_dynamic_file = fopen("../exp/task_dynamic", "a+");
-		for(j=0; j<sim_duration; j++) fprintf(task_dynamic_file, "%d %d\n", database->target_nresults, database->valid_workunits_timestamps[j]);	
+		printf("  Credit granted: \t\t%'" PRId64 " credits\n\n\n", (long int)database->total_credit);
+		FILE *task_dynamic_file = fopen("../exp/task_dynamic", "w+");
+		FILE *task_creation_file = fopen("../exp/workunits_creation", "w+");
+		for (j = 0; j < database->applications_num; j++) {
+			printf("Application %ld\n", j);
+			application_t application = &database->applications[j];
+			printf("  Workunits total: \t\t%'" PRId64 "\n", application->nworkunits);
+			for(k=0; k<sim_duration; k++) fprintf(task_dynamic_file, "%ld %d\n", j,  application->valid_workunits_timestamps[k]);	
+			for(k=0; k<sim_duration; k++) fprintf(task_creation_file, "%ld %d\n", j,  application->creation_workunit_timestamps[k]);	
+			printf("\n");
+		}
 		fclose(task_dynamic_file);
+		fclose(task_creation_file);
+		//printf("  FLOPS average: \t\t%'" PRId64 " GFLOPS\n\n", (int64_t)((double)database->nvalid_results*(double)database->job_duration/sim_duration/1000000000.0));	
 		FILE *task_completed_dynamic_file = fopen("../exp/task_dynamic_completed", "a+");
-		for(j=0; j<sim_duration; j++) fprintf(task_completed_dynamic_file, "%d %d\n", database->target_nresults, database->valid_completed_workunits_timestamps[j]);	
+		for(j=0; j<sim_duration; j++) fprintf(task_completed_dynamic_file, "%d %d\n", database->applications[0].target_nresults, database->valid_completed_workunits_timestamps[j]);	
 		fclose(task_completed_dynamic_file);
 		FILE *workunits_all_dynamic_file = fopen("../exp/workunits_all_dynamic", "w+");
 		for(j=0; j<sim_duration; j++) fprintf(workunits_all_dynamic_file, "%d\n",database->workunit_timestamps[j]);	
@@ -699,34 +734,23 @@ int init_database(int argc, char *argv[])
 {
 	int i, project_number;
 	pdatabase_t database;
+	int j = 1;
 	
-	if (argc != 19) {
+	/*if (argc != 19) {
 		printf("Invalid number of parameter in init_database()\n");
 		return 0;
-	}		
+	}*/		
 
-	project_number = atoi(argv[1]);
+	project_number = atoi(argv[j++]);
 	database = &_pdatabase[project_number];	
 
 	// Init database
 	database->project_number = project_number;			// Project number
-	database->project_name = xbt_strdup(argv[2]);			// Project name
-	database->output_file_size = (int64_t)atoll(argv[3]);		// Answer size
-	database->job_duration = (int64_t) atoll(argv[4]);		// Workunit duration
-	database->ifgl_percentage = (char)atoi(argv[5]); 		// Percentage of input files generated locally
-	database->ifcd_percentage = (char)atoi(argv[6]);			// Number of workunits that share the same input files
-	database->min_quorum = (int32_t)atoi(argv[7]);			// Quorum
-	database->target_nresults = (int32_t)atoi(argv[8]);		// target_nresults
-	database->max_error_results = (int32_t)atoi(argv[9]);		// max_error_results
-	database->max_total_results = (int32_t)atoi(argv[10]);		// Maximum number of times a task must be sent
-	database->max_success_results = (int32_t)atoi(argv[11]);		// max_success_results
-	database->delay_bound = (int64_t)atoll(argv[12]);		// Workunit deadline
-	database->success_percentage = (char)atoi(argv[13]);		// Success results percentage
-	database->canonical_percentage = (char)atoi(argv[14]);		// Canonical results percentage
-	database->input_file_size = (int64_t)atoll(argv[15]);		// Input file size
-	database->disk_bw = (int64_t)atoll(argv[16]);			// Disk bandwidth
-	database->ndata_servers = (char)atoi(argv[17]);			// Number of data servers
-	database->replication = (int32_t)atoi(argv[18]);		// Input file replication
+	database->project_name = xbt_strdup(argv[j++]);			// Project name
+	database->disk_bw = (int64_t)atoll(argv[j++]);			// Disk bandwidth
+	database->ndata_servers = (char)atoi(argv[j++]);			// Number of data servers
+	database->replication = (int32_t)atoi(argv[j++]);		// Input file replication
+	database->applications_num = (int32_t)atoi(argv[j++]);
 	database->nmessages_received = 0;				// Store number of messages rec.
 	database->nresults = 0;						// Number of results created
 	database->nresults_sent = 0;					// Number of results sent
@@ -743,6 +767,42 @@ int init_database(int argc, char *argv[])
 	database->nvalid_workunits_not_finished = 0;
 	database->nerror_workunits = 0;					// Number of erroneous workunits
 	database->nfinished_scheduling_servers = 0;			// Number of finished scheduling servers
+
+	database->applications = xbt_new(struct application, database->applications_num);
+	for (i = 0; i < database->applications_num; i++) {
+		database->applications[i].percentage = (double)atof(argv[j++]);	
+		database->applications[i].output_file_size = (int64_t)atoll(argv[j++]);		// Answer size
+		database->applications[i].job_duration = (int64_t) atoll(argv[j++]);		// Workunit duration
+		database->applications[i].ifgl_percentage = (char)atoi(argv[j++]); 		// Percentage of input files generated locally
+		database->applications[i].ifcd_percentage = (char)atoi(argv[j++]);			// Number of workunits that share the same input files
+		database->applications[i].min_quorum = (int32_t)atoi(argv[j++]);			// Quorum
+		database->applications[i].target_nresults = (int32_t)atoi(argv[j++]);		// target_nresults
+		database->applications[i].max_error_results = (int32_t)atoi(argv[j++]);		// max_error_results
+		database->applications[i].max_total_results = (int32_t)atoi(argv[j++]);		// Maximum number of times a task must be sent
+		database->applications[i].max_success_results = (int32_t)atoi(argv[j++]);		// max_success_results
+		database->applications[i].delay_bound = (int64_t)atoll(argv[j++]);		// Workunit deadline
+		database->applications[i].success_percentage = (char)atoi(argv[j++]);		// Success results percentage
+		database->applications[i].canonical_percentage = (char)atoi(argv[j++]);		// Canonical results percentage
+		database->applications[i].input_file_size = (int64_t)atoll(argv[j++]);		// Input file size
+
+		database->applications[i].nworkunits = 0;		// Number of workunits created
+		database->applications[i].nvalid_workunits = 0;	// Number of workunits validated
+		database->applications[i].nvalid_workunits_not_finished = 0;
+		database->applications[i].nerror_workunits = 0;	// Number of erroneous workunits
+		database->applications[i].valid_workunits_timestamps = xbt_new0(int32_t, 10000000);;
+		database->applications[i].valid_completed_workunits_timestamps = xbt_new0(int32_t, 10000000);;
+		database->applications[i].creation_workunit_timestamps = xbt_new0(int32_t, 10000000);
+
+		database->applications[i].workunits_number = 100000000000;
+		database->applications[i].sleep_time = 0;
+		database->applications[i].is_on = 1;
+		database->applications[i].suspended_until = 0;
+		database->applications[i].nworkunits_cur = 0;
+	} 
+	printf("initialized\n");
+
+	database->applications[1].sleep_time = 3600 * 24;
+	database->applications[1].workunits_number = 2000;
 	
 	// Fill with data server names
 	database->data_servers = xbt_new0(char*, (int) database->ndata_servers);
@@ -775,16 +835,42 @@ workunit_t generate_workunit(pdatabase_t database){
 	workunit->nerror_results = 0;
 	workunit->ncurrent_error_results = 0;
 	workunit->credits = -1;
-	workunit->times = xbt_new(double, database->max_total_results);
+	double sum = 0;
+	double* prefix_sum = xbt_new(double, database->applications_num);
+	for (i = 0; i < database->applications_num; i++) {
+		if (!database->applications[i].is_on) {
+			continue;
+		}
+		double percantage =  database->applications[i].percentage;
+		sum += percantage;
+		if (i == 0) {
+			prefix_sum[i] = percantage;
+		} else {
+			prefix_sum[i] = prefix_sum[i - 1] + percantage;
+		}
+	}
+	double rand = uniform_ab(0, sum);
+	for (i = 0; i < database->applications_num; i++) {
+		if (!database->applications[i].is_on) {
+			continue;
+		}
+		if (rand < prefix_sum[i]) {
+			workunit->application = i;
+			break;
+		}
+	}
+	workunit->times = xbt_new(double, database->applications[workunit->application].max_total_results);
 	workunit->ninput_files = database->replication;
 	workunit->input_files=xbt_new(char *, workunit->ninput_files);
 
 	for(i=0; i<workunit->ninput_files; i++)
 		workunit->input_files[i] = database->data_servers[uniform_int(0, database->ndata_servers-1)];
 	database->nworkunits++;
-	database->workunit_timestamps[(int)MSG_get_clock()] += 1;
+	database->applications[workunit->application].nworkunits++;
+	database->applications[workunit->application].nworkunits_cur++;
+	database->applications[workunit->application].creation_workunit_timestamps[(int)MSG_get_clock()] += 1;
 
-	
+	xbt_free(prefix_sum);
 	return workunit;
 }
 
@@ -832,12 +918,6 @@ int work_generator(int argc, char *argv[])
 	while(!database->wg_end){
 		
 		xbt_mutex_acquire(database->r_mutex);
-
-		if (database->nvalid_workunits == WORKUNITS_TOTAL) {
-			printf("Work generator stopped %f\n", MSG_get_clock());	
-			xbt_mutex_release(database->r_mutex);
-			break;
-		}
 	
 		while(database->ncurrent_results >= MAX_BUFFER && !database->wg_end) {
 			xbt_cond_wait(database->wg_full, database->r_mutex);	
@@ -866,25 +946,53 @@ int work_generator(int argc, char *argv[])
 		}
 		// Create new workunit and target_nresults
 		else {
-			if (database->nworkunits < WORKUNITS_TOTAL + database->nerror_workunits){
+			int32_t has_active_app = 0;
+			double first_active = 0;
+			for (int i = 0; i < database->applications_num; i++) {
+				application_t application = &database->applications[i];
+				if (application->is_on) {
+					//printf("%d %ld\n", application->nworkunits_cur, application->workunits_number);
+					if (application->nworkunits_cur == application->workunits_number) {
+						printf("application %d is sleeping application->nworkunits_cur %d\n", i, application->nworkunits_cur);
+						application->is_on = 0;
+						application->suspended_until = min(MSG_get_clock() + application->sleep_time, sim_duration);
+						application->nworkunits_cur = 0;
+					}
+				} else {
+					if (application->suspended_until < MSG_get_clock()) {
+						application->is_on = 1;
+					}
+				}
+				if (application->is_on) {
+					has_active_app = 1;
+				}
+				if (application->suspended_until > MSG_get_clock()) {
+					first_active = min(first_active, application->suspended_until);
+				}
+			} 
+			assert(first_active > 0 || has_active_app);
+			if (has_active_app){
 				// Generate workunit
 				//printf("generating %ld %ld %ld %f\n", database->nworkunits, database->ncurrent_results, database->nvalid_workunits, MSG_get_clock());
 				workunit_t workunit = generate_workunit(database);
 				xbt_dict_set(database->current_workunits, workunit->number, workunit, (void_f_pvoid_t) free_workunit); 		
 
 				// Generate target_nresults instances
-				for(i=0; i<database->target_nresults; i++){
+				for(i=0; i<database->applications[workunit->application].target_nresults; i++){
 					result_t result = generate_result(database, workunit, 0);
 					xbt_queue_push(database->current_results, (const char *)&(result));	
 				}
 			} else {
 				xbt_mutex_release(database->r_mutex);
-				//printf("sleeping\n");
-				while (database->ncurrent_error_results == 0 && !database->wg_end) {
-					xbt_cond_wait(database->wg_err, database->er_mutex);
+				xbt_ex_t e;
+				TRY {
+					while (database->ncurrent_error_results == 0 && !database->wg_end) {
+						xbt_cond_timedwait(database->wg_err, database->er_mutex, first_active - MSG_get_clock());
+					}
+					xbt_mutex_release(database->er_mutex);
+				} CATCH(e) {
+					xbt_ex_free(e);
 				}
-				xbt_mutex_release(database->er_mutex);
-				//printf("slept\n");
 				continue;
 			}
 		}
@@ -939,7 +1047,7 @@ int validator(int argc, char *argv[])
 		workunit->nresults_received++;
 
 		// Delay result
-		if(MSG_get_clock()-workunit->times[reply->result_number] >= database->delay_bound){
+		if(MSG_get_clock()-workunit->times[reply->result_number] >= database->applications[workunit->application].delay_bound){
 			//printf("delayed\n");
 			reply->status = FAIL;
 			workunit->nerror_results++;
@@ -947,6 +1055,7 @@ int validator(int argc, char *argv[])
 		}
 		// Success result
 		else if(reply->status == SUCCESS){
+			//printf("success\n");
 			workunit->nsuccess_results++;
 			database->nsuccess_results++;
 			if(reply->value == CORRECT){
@@ -957,6 +1066,7 @@ int validator(int argc, char *argv[])
 		}
 		// Error result
 		else{
+			//printf("error\n");
 			workunit->nerror_results++;
 			database->nerror_results++;
 		}
@@ -968,16 +1078,17 @@ int validator(int argc, char *argv[])
 		// Check workunit
 		xbt_mutex_acquire(database->er_mutex);
 		if(workunit->status == IN_PROGRESS){
-			if(workunit->nvalid_results 			>= 	database->min_quorum){ 
+			if(workunit->nvalid_results 			>= 	database->applications[workunit->application].min_quorum){ 
 				workunit->status = VALID;
 				database->nvalid_workunits_not_finished++;
 				database->nvalid_results += (int64_t)(workunit->nvalid_results);
 				database->total_credit += (int64_t)(workunit->credits*workunit->nvalid_results);	
 				database->valid_workunits_timestamps[(int32_t)MSG_get_clock()] += 1;
+				database->applications[workunit->application].valid_workunits_timestamps[(int32_t)MSG_get_clock()] += 1;
 			}
-			else if(workunit->ntotal_results 		>=	database->max_total_results		||
-				workunit->nerror_results 		>= 	database->max_error_results 		||
-				workunit->nsuccess_results 		>=	database->max_success_results 
+			else if(workunit->ntotal_results 		>=	database->applications[workunit->application].max_total_results		||
+				workunit->nerror_results 		>= 	database->applications[workunit->application].max_error_results 		||
+				workunit->nsuccess_results 		>=	database->applications[workunit->application].max_success_results 
 				) workunit->status = ERROR;
 		}
 		else if(workunit->status == VALID && reply->status == SUCCESS && reply->value == CORRECT){
@@ -988,9 +1099,9 @@ int validator(int argc, char *argv[])
 		// If result is an error and task is not completed, call work generator in order to create a new instance
 		if(reply->status == FAIL){	
 			if(	workunit->status 			==	IN_PROGRESS				&&
-				workunit->nsuccess_results		<	database->max_success_results 		&&
-				workunit->nerror_results		<	database->max_error_results 		&&
-				workunit->ntotal_results		<	database->max_total_results)
+				workunit->nsuccess_results		<	database->applications[workunit->application].max_success_results 		&&
+				workunit->nerror_results		<	database->applications[workunit->application].max_error_results 		&&
+				workunit->ntotal_results		<	database->applications[workunit->application].max_total_results)
 			{	
 				xbt_queue_push(database->current_error_results, (const char *)&(workunit));	
 				database->ncurrent_error_results++;
@@ -1102,8 +1213,10 @@ result_t select_result(int project_number, request_t req){
 	if(database->ncurrent_results == 0)
 		xbt_cond_signal(database->wg_full);
 
+	double job_duration = database->applications[result->workunit->application].job_duration;
+
 	// Calculate number of tasks
-	result->number_tasks = (int32_t) floor(req->percentage/((double)database->job_duration/req->speed));
+	result->number_tasks = (int32_t) floor(req->percentage/(job_duration/req->speed));
 	if (result->number_tasks == 0) result->number_tasks = (int32_t) 1;
 		
 	// Create tasks
@@ -1113,9 +1226,10 @@ result_t select_result(int project_number, request_t req){
 	for (i = 0; i < result->number_tasks; i++) {
 		task = xbt_new0(s_task_t, 1);
 		task->workunit = result->workunit->number;
+		task->application = result->workunit->application;
 		task->name = bprintf("%" PRId32, result->workunit->nsent_results++);
- 		task->duration = database->job_duration*((double)req->group_speed/req->speed);	
-		task->deadline = database->delay_bound;
+ 		task->duration = job_duration*((double)req->group_speed/req->speed);	
+		task->deadline = database->applications[result->workunit->application].delay_bound;
 		task->start = MSG_get_clock();
 		task->heap_index = -1;
 		result->tasks[i] = task;
@@ -1275,7 +1389,7 @@ int scheduling_server_dispatcher(int argc, char *argv[])
 		// Check if message is an answer with the computation results
 		if(msg-> type == REPLY){
 			xbt_mutex_acquire(database->v_mutex);
-			//printf("reply received for validating %ld", database->nresults_received);
+			//printf("reply received for validating %ld\n", database->nresults_received);
 	
 			// Call validator
 			xbt_queue_push(database->current_validations, (const char *)&(msg->content));
@@ -1290,15 +1404,15 @@ int scheduling_server_dispatcher(int argc, char *argv[])
 			xbt_mutex_acquire(database->r_mutex);
 			xbt_ex_t e;
 			//printf("%ld\n", database->ncurrent_results);
-			if (database->ncurrent_results == 0 && database->nvalid_workunits < WORKUNITS_TOTAL) {
+			/*if (database->ncurrent_results == 0 && database->nvalid_workunits < WORKUNITS_TOTAL) {
 				TRY {
 					//printf("waiting %ld %ld\n", database->nvalid_workunits, database->ncurrent_results);
 					xbt_cond_timedwait(database->wg_empty, database->r_mutex, 5);
 				} CATCH(e) {
 					xbt_ex_free(e);
 				}
-			}
-			if (database->ncurrent_results == 0  || database->nvalid_workunits == WORKUNITS_TOTAL) {
+			}*/
+			if (database->ncurrent_results == 0) {
 				//printf("sending zero result\n");
 				result = xbt_new0(s_result_t, 1);
 				result->number_tasks = 0;
@@ -1309,6 +1423,7 @@ int scheduling_server_dispatcher(int argc, char *argv[])
 				//printf("%d\n",result->number_tasks);
 			}	
 			xbt_mutex_release(database->r_mutex);
+			//printf("sending %d %d\n", result->number_tasks, (int)MSG_get_clock());
 			FILE* sent_results_files = fopen("../exp/sent_results", "a+");
 			fprintf(sent_results_files, "%d %d\n", result->number_tasks, (int)MSG_get_clock());
 			fclose(sent_results_files);
@@ -1492,17 +1607,18 @@ int data_server_dispatcher(int argc, char *argv[])
 		dserver_info->Nqueue--;
 		xbt_mutex_release(dserver_info->mutex);
 
+		application_t application = &database->applications[req->application];
 		// Reply with output file
 		if(req->type == REPLY){
-			disk_access(project_number, database->output_file_size);
+			disk_access(project_number, application->output_file_size);
 		}
 		// Input file request
 		else{
 			// Read tasks from disk
-			disk_access(project_number, database->input_file_size);	
+			disk_access(project_number, application->input_file_size);	
 
 			// Create the message
-			ans_msg_task = MSG_task_create("input_file_task", 0, database->input_file_size, NULL);
+			ans_msg_task = MSG_task_create("input_file_task", 0, application->input_file_size, NULL);
 	
 			// Answer the client
 			comm = MSG_task_isend(ans_msg_task, req->answer_mailbox);		
@@ -1653,12 +1769,18 @@ static int client_ask_for_work(client_t client, project_t proj, double percentag
 
 		// Increase number of tasks checked
 		proj->total_tasks_checked++;	
-
+		
+		// Pop executed result number and associated workunit
+		xbt_queue_pop(proj->number_executed_task, &((reply_t)ssexecution_results->content)->result_number);
+		xbt_queue_pop(proj->workunit_executed_task, &((reply_t)ssexecution_results->content)->workunit);
+		
+		workunit_t workunit = xbt_dict_get(database->current_workunits, ((reply_t)ssexecution_results->content)->workunit);
+		application_t application = &database->applications[workunit->application];
 		// Executed task status [SUCCES, FAIL]	
-		if(uniform_int(0,99) < database->success_percentage){
+		if(uniform_int(0,99) < application->success_percentage){
 			 ((reply_t)ssexecution_results->content)->status = SUCCESS;
 			// Executed task value [CORRECT, INCORRECT]
-			if(uniform_int(0,99) < database->canonical_percentage) {
+			if(uniform_int(0,99) < application->canonical_percentage) {
 				((reply_t)ssexecution_results->content)->value = CORRECT;
 			} 
 			else ((reply_t)ssexecution_results->content)->value = INCORRECT;
@@ -1668,13 +1790,9 @@ static int client_ask_for_work(client_t client, project_t proj, double percentag
 			((reply_t)ssexecution_results->content)->value = INCORRECT;
 		}
 	
-		
-		// Pop executed result number and associated workunit
-		xbt_queue_pop(proj->number_executed_task, &((reply_t)ssexecution_results->content)->result_number);
-		xbt_queue_pop(proj->workunit_executed_task, &((reply_t)ssexecution_results->content)->workunit);
 	
 		// Calculate credits	
-		((reply_t)ssexecution_results->content)->credits = (int32_t)((int64_t)database->job_duration / 1000000000.0 * CREDITS_CPU_S);	
+		((reply_t)ssexecution_results->content)->credits = (int32_t)((int64_t)application->job_duration / 1000000000.0 * CREDITS_CPU_S);	
 		// Create execution results task
 		ssexecution_results_task = MSG_task_create("execution_answer", 0, REPLY_SIZE, ssexecution_results);
 			
@@ -1685,7 +1803,7 @@ static int client_ask_for_work(client_t client, project_t proj, double percentag
 		// Upload output file to data server
 		dsoutput_file = xbt_new0(s_dsmessage_t, 1);	
 		dsoutput_file->type = REPLY;
-		dsoutput_file_task = MSG_task_create("output_file", 0, database->output_file_size, dsoutput_file);			
+		dsoutput_file_task = MSG_task_create("output_file", 0, application->output_file_size, dsoutput_file);			
 		MSG_task_send(dsoutput_file_task, database->data_servers[uniform_int(0, database->ndata_servers-1)]);
 		dsoutput_file_task = NULL;
 	}
@@ -1710,27 +1828,35 @@ static int client_ask_for_work(client_t client, project_t proj, double percentag
 		comm = NULL;	
 
 		// Download input files (or generate them locally)
-		if(sswork_reply->number_tasks > 0 && uniform_int(0,99) < (int)database->ifgl_percentage){
-			// Download only if the workunit was not downloaded previously
-			if(uniform_int(0,99) < (int)database->ifcd_percentage){
-				dsinput_file_request = xbt_new0(s_dsmessage_t, 1);
-				dsinput_file_request->type = REQUEST;
-				dsinput_file_request->answer_mailbox = proj->answer_mailbox;
-				dsinput_file_request_task = MSG_task_create("ask_work", 0, KB, dsinput_file_request);
-				server_name = sswork_reply->input_files[0];
-				MSG_task_send(dsinput_file_request_task, server_name);			// Send input file request
-				MSG_task_receive(&dsinput_file_reply_task, proj->answer_mailbox);	// Send input file reply
-				comm = xbt_dict_get(_dscomm, proj->answer_mailbox);			// Get connection
-				xbt_dict_remove(_dscomm, proj->answer_mailbox);				// Remove connection from dict
-				MSG_comm_wait(comm, -1);						// Wait until communication ends
-				MSG_comm_destroy(comm);							// Destroy connection
-				comm = NULL;
-				MSG_task_destroy(dsinput_file_reply_task);
+		if (sswork_reply->number_tasks > 0) {
+			application_t application = &database->applications[sswork_reply->workunit->application];
+			if(uniform_int(0,99) < (int)application->ifgl_percentage){
+				// Download only if the workunit was not downloaded previously
+				if(uniform_int(0,99) < (int)application->ifcd_percentage){
+					dsinput_file_request = xbt_new0(s_dsmessage_t, 1);
+					dsinput_file_request->type = REQUEST;
+					dsinput_file_request->application = sswork_reply->workunit->application;
+					dsinput_file_request->answer_mailbox = proj->answer_mailbox;
+					dsinput_file_request_task = MSG_task_create("ask_work", 0, KB, dsinput_file_request);
+					server_name = sswork_reply->input_files[0];
+					MSG_task_send(dsinput_file_request_task, server_name);			// Send input file request
+					MSG_task_receive(&dsinput_file_reply_task, proj->answer_mailbox);	// Send input file reply
+					comm = xbt_dict_get(_dscomm, proj->answer_mailbox);			// Get connection
+					xbt_dict_remove(_dscomm, proj->answer_mailbox);				// Remove connection from dict
+					MSG_comm_wait(comm, -1);						// Wait until communication ends
+					MSG_comm_destroy(comm);							// Destroy connection
+					comm = NULL;
+					MSG_task_destroy(dsinput_file_reply_task);
+				}
 			}
 		}
 
 		if(sswork_reply->number_tasks == 0) {
 			proj->on = 0;
+			client->work_fetch_multiplicator += uniform_ab(3, 4);
+		} else {
+			proj->on = 1;
+			client->work_fetch_multiplicator = 1;
 		}
 		// Insert received tasks in tasks swag	
 		for (i = 0; i < (int)sswork_reply->number_tasks; i++) {
@@ -1787,11 +1913,14 @@ static void client_update_shortfall(client_t client)
 		}
 		total_time += total_time_proj;
 		/* amount of work needed - total already loaded */
+		//printf("shortfall %0.1f %0.1f\n", _group_info[client->group_number].connection_interval*proj->priority/ client->sum_priority, total_time_proj);
 		proj->shortfall = _group_info[client->group_number].connection_interval*proj->priority/ client->sum_priority - total_time_proj;
 
 
-		if (proj->shortfall < 0)
+		if (proj->shortfall < 0) {
+			//printf("shortfall %0.1f %0.1f\n", _group_info[client->group_number].connection_interval*proj->priority/ client->sum_priority, total_time_proj);
 			proj->shortfall = 0;
+		}
 	}
 	client->total_shortfall = _group_info[client->group_number].connection_interval - total_time;
 	if (client->total_shortfall < 0)
@@ -1846,14 +1975,18 @@ static int client_work_fetch(int argc, char *argv[])
 			/* if there are no running tasks so we can download from all projects. Don't waste processing time */
 			//if (client->running_project != NULL && client->running_project->running_task && proj->long_debt < -_group_speed[client->group_number].scheduling_interval) {
 			//printf("Shortfall %s: %f\n", proj->name, proj->shortfall);
-			if(!proj->on && proj->total_tasks_executed == proj->total_tasks_checked){
+			/*if(!proj->on && proj->total_tasks_executed == proj->total_tasks_checked){
 				continue;
-			}
+			}*/
 			if (!client->no_actions && proj->long_debt < -_group_info[client->group_number].scheduling_interval) {
+				printf("continue1\n");
 				continue;
 			}
-			if (proj->shortfall == 0)
+			if (proj->shortfall == 0) {
+				//printf("continue2\n");
 				continue;
+			}
+	
 			/* FIXME: CONFLIT: the article says (long_debt - shortfall) and the wiki(http://boinc.berkeley.edu/trac/wiki/ClientSched) says (long_debt + shortfall). I will use here the wiki definition because it seems have the same behavior of web client simulator.*/
 
 ///////******************************///////
@@ -1878,9 +2011,13 @@ static int client_work_fetch(int argc, char *argv[])
 FIXME: http://www.boinc-wiki.info/Work-Fetch_Policy */
 			if (xbt_heap_size(client->deadline_missed) == 0 && work_percentage > 0)
 			{
-				//printf("*************    ASK FOR WORK      %g   %g\n",   work_percentage, MSG_get_clock());	
-				client_ask_for_work(client, selected_proj, work_percentage);				
-			}
+				//printf("*************    ASK FOR WORK      %g   %g\n",   work_percentage, MSG_get_clock());
+				if (!selected_proj->on && selected_proj->total_tasks_executed == selected_proj->total_tasks_checked)	{
+					MSG_process_sleep((client->work_fetch_multiplicator - 1) * WORK_FETCH_PERIOD);
+				}		
+				//printf("asking for work %0.1f\n", MSG_get_clock());
+				client_ask_for_work(client, selected_proj, work_percentage);		
+			} 
 		}
 		/* workaround to start scheduling tasks at time 0 */
 		if (first) {
@@ -1893,16 +2030,16 @@ FIXME: http://www.boinc-wiki.info/Work-Fetch_Policy */
 		TRY {
 			if(MSG_get_clock() >= (sim_duration-WORK_FETCH_PERIOD))
 				break;
-	
 			if (!selected_proj || xbt_heap_size(client->deadline_missed) > 0 || work_percentage == 0) {
-				//printf("EXIT 1: remaining %f, time %f\n", sim_duration-MSG_get_clock(), MSG_get_clock());
+				//printf("EXIT 1 %d %d %0.1f\n", (int)selected_proj, xbt_heap_size(client->deadline_missed), work_percentage);
 				xbt_cond_timedwait(client->work_fetch_cond, client->work_fetch_mutex, max(0, sim_duration-MSG_get_clock()));
 				//xbt_cond_timedwait(client->work_fetch_cond, client->work_fetch_mutex, -1);
 				//printf("SALGO DE EXIT 1: remaining %f, time %f\n", sim_duration-MSG_get_clock(), MSG_get_clock());
 			}
 			else{
+				//printf("sleeping %0.1f\n", client->work_fetch_multiplicator * WORK_FETCH_PERIOD);
 				//printf("EXIT 2: remaining %f time %f\n", sim_duration-MSG_get_clock(), MSG_get_clock());
-				xbt_cond_timedwait(client->work_fetch_cond, client->work_fetch_mutex, WORK_FETCH_PERIOD);
+				xbt_cond_timedwait(client->work_fetch_cond, client->work_fetch_mutex,  WORK_FETCH_PERIOD);
 				//printf("SALGO DE EXIT 2: remaining %f, time %f\n", sim_duration-MSG_get_clock(), MSG_get_clock());
 			}
 		} CATCH (e) {
@@ -2446,6 +2583,7 @@ static client_t client_new(int argc, char *argv[])
 	client->cond_init = xbt_cond_init();
 	client->initialized = 0;
 	client->n_projects = 0;
+	client->work_fetch_multiplicator = 1;
 
 	double join_time = client->join_day * 24 + uniform_ab(0, min(24, (sim_duration - MSG_get_clock()) / 3600.0));
 	MSG_process_sleep(join_time * 3600);
@@ -2760,6 +2898,7 @@ int main(int argc, char *argv[])
 	remove("../exp/unavailability");
 	remove("../exp/sent_results");
 	remove("../exp/got_results");
+	remove("../exp/workunits_creation");
 
 	_total_speed = 0;
 	_total_available = 0;
@@ -2867,6 +3006,7 @@ int main(int argc, char *argv[])
 	_dscomm = xbt_dict_new();	
 
 	res = test_all(argv[1], argv[2]);
+	printf("tested\n");
 
 	for (i = 0; i < NUMBER_PROJECTS; i++) {
 

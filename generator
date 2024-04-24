@@ -29,6 +29,8 @@ max_success_results=($(cat parameters.xml | grep -oP '(?<=max_success_results>)[
 replication=($(cat parameters.xml | grep -oP '(?<=replication>)[^<]+'))
 nscheduling_servers=($(cat parameters.xml | grep -oP '(?<=nscheduling_servers>)[^<]+'))
 ndata_servers=($(cat parameters.xml | grep -oP '(?<=ndata_servers>)[^<]+'))
+n_applications=($(cat parameters.xml | grep -oP '(?<=n_applications>)[^<]+'))
+application_percentage=($(cat parameters.xml | grep -oP '(?<=application_percentage>)[^<]+'))
 
 n_groups=($(cat parameters.xml | grep -oP '(?<=n_groups>)[^<]+'))
 n_clients=($(cat parameters.xml | grep -oP '(?<=n_clients>)[^<]+'))
@@ -101,6 +103,7 @@ declare -a hosts_overall
 
 
 let j=0
+let cur_applications=0
 
 arg2[j++]=${n_projects}
 arg2[j++]=${simulation_time}
@@ -110,23 +113,29 @@ for ((i=0; i<n_projects; i++))
 do
 	arg2[j++]=${snumber[$i]}
 	arg2[j++]=${name[$i]}
-	arg2[j++]=${output_file_size[$i]}
-	arg2[j++]=${task_fpops[$i]}
-	arg2[j++]=${ifgl_percentage[$i]}
-	arg2[j++]=${ifcd_percentage[$i]}
-	arg2[j++]=${min_quorum[$i]}
-	arg2[j++]=${target_nresults[$i]}
-	arg2[j++]=${max_error_results[$i]}
-	arg2[j++]=${max_total_results[$i]}
-	arg2[j++]=${max_success_results[$i]}
-	arg2[j++]=${delay_bound[$i]}	
-	arg2[j++]=${success_percentage[$i]}
-	arg2[j++]=${canonical_percentage[$i]}		
-	arg2[j++]=${input_file_size[$i]}
-	arg2[j++]=${disk_bw[$i]}
+  arg2[j++]=${disk_bw[$i]}
+  arg2[j++]=${nscheduling_servers[$i]} 
 	arg2[j++]=${ndata_servers[$i]}	
 	arg2[j++]=${replication[$i]}
-	arg2[j++]=${nscheduling_servers[$i]}		
+  arg2[j++]=${n_applications[$i]}
+  for ((k=0; k<n_applications[i]; k++))
+  do 
+    arg2[j++]=${application_percentage[$cur_applications]}
+    arg2[j++]=${output_file_size[$cur_applications]}
+    arg2[j++]=${task_fpops[$cur_applications]}
+    arg2[j++]=${ifgl_percentage[$cur_applications]}
+    arg2[j++]=${ifcd_percentage[$cur_applications]}
+    arg2[j++]=${min_quorum[$cur_applications]}
+    arg2[j++]=${target_nresults[$cur_applications]}
+    arg2[j++]=${max_error_results[$cur_applications]}
+    arg2[j++]=${max_total_results[$cur_applications]}
+    arg2[j++]=${max_success_results[$cur_applications]}
+    arg2[j++]=${delay_bound[$cur_applications]}	
+    arg2[j++]=${success_percentage[$cur_applications]}
+    arg2[j++]=${canonical_percentage[$cur_applications]}		
+    arg2[j++]=${input_file_size[$cur_applications]}	
+    ((cur_applications++))
+  done
 done
 
 arg2[j++]=${n_groups}
